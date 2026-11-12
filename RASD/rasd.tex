@@ -1,0 +1,120 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[english]{babel}
+\usepackage[margin=2.6cm]{geometry}
+\usepackage{microtype}
+\usepackage{booktabs,longtable,array}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage[font=small,labelfont=bf,labelsep=period,skip=6pt]{caption}
+\usepackage{xcolor}
+\usepackage{needspace}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{accent}{HTML}{1F3A5F}
+\definecolor{rowgray}{HTML}{F2F4F7}
+
+\newcommand{\RP}{RacePulse}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+\titleformat{\section}{\Large\bfseries\color{accent}}{\thesection}{0.8em}{}
+\titleformat{\subsection}{\large\bfseries\color{accent}}{\thesubsection}{0.8em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\color{accent}}{\thesubsubsection}{0.8em}{}
+\titlespacing*{\section}{0pt}{0pt}{12pt}
+\titlespacing*{\subsection}{0pt}{18pt}{8pt}
+\titlespacing*{\subsubsection}{0pt}{14pt}{6pt}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.7em}
+\renewcommand{\arraystretch}{1.25}
+\setlength{\LTpre}{6pt}
+\setlength{\LTpost}{6pt}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{accent}{\RP{} --- RASD}}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{accent}\leaders\hrule height \headrulewidth\hfill}}
+
+\begin{document}
+
+% ---------------------------------------------------------------- Front page
+\begin{titlepage}
+\thispagestyle{empty}
+\centering
+\vspace*{2.2cm}
+{\large\color{accent}\scshape Politecnico di Milano\par}
+{\normalsize Software Engineering 2 \quad|\quad A.Y.\ 2026--2027\par}
+\vspace{2.6cm}
+{\fontsize{34}{40}\selectfont\bfseries\color{accent}\RP\par}
+\vspace{0.6cm}
+{\Large Requirements Analysis and\\[2pt] Specification Document\par}
+\vspace{0.4cm}
+{\large (RASD)\par}
+\vspace{1.4cm}
+\textcolor{accent}{\rule{6cm}{0.8pt}}\par
+\vspace{1.4cm}
+{\large\bfseries Authors\par}
+\vspace{0.4cm}
+{\large Giulia Blanchetti \quad 10913272\par}
+{\large Nicola Cornali \quad 10919230\par}
+\vfill
+\begin{tabular}{rl}
+\end{tabular}
+\vspace{1.5cm}
+\end{titlepage}
+
+% ---------------------------------------------------------------- Contents
+\pagenumbering{roman}
+\setcounter{page}{2}
+\renewcommand{\contentsname}{Table of Contents}
+\tableofcontents
+\clearpage
+
+\pagenumbering{arabic}
+
+% ---------------------------------------------------------------- Chapter 1
+\section{Introduction}
+
+\subsection{Purpose}
+Formula~1 racing sessions generate a large, continuous stream of heterogeneous data, including car telemetry,
+real-time positions, lap and sector times, driver intervals, pit-stop details, weather conditions, and
+race-control events. Different categories of consumers require access to distinct subsets of this information:
+racing enthusiasts seek to follow or replay races through visual interfaces, while developers of third-party
+software systems require programmatic access to analyze telemetry, compare performances across sessions, or
+track driver progression.
+
+\RP{} is a distributed software platform designed to ingest this data from an external provider (OpenF1 in our
+case), store it persistently, and distribute it---either in near real time or on demand---to a large and
+heterogeneous population of consumers via dedicated graphical and application programming interfaces (GUI and
+API). The platform ensures customized delivery, high availability, and timeliness without suffering uncontrolled
+data loss during workload peaks or propagating consumer-side failures.
+
+The goals of \RP{} are listed in Table~\ref{tab:goals}.
+
+\begin{longtable}{@{}L{1.4cm} L{13.3cm}@{}}
+\caption{Goals of \RP.}\label{tab:goals}\\
+\toprule \textbf{ID} & \textbf{Goal}\\ \midrule \endfirsthead
+\toprule \textbf{ID} & \textbf{Goal}\\ \midrule \endhead
+\bottomrule \endfoot
+G1 & The system continuously acquires Formula~1 racing session information and telemetry from the external data provider.\\
+G2 & A consumer can follow an ongoing racing session in near real time.\\
+G3 & A consumer can customize and filter the specific categories of racing data and events they want to receive.\\
+G4 & A consumer can query, analyze, and replay historical data from past racing sessions.\\
+G5 & Third-party software systems can consume live and historical racing data programmatically.\\
+G6 & The system persistently stores all acquired racing session data to guarantee long-term availability.\\
+G7 & A consumer can access the platform without their service availability or performance being degraded by the failures or abnormal behavior of other consumers.\\
+\end{longtable}
+
+\subsection{Scope}
+The scope of \RP{} is defined by the boundary between the machine (the software system to be built) and the
+world (the operational environment with which it interacts). This section delineates the system perimeter,
+formalizes the atomic phenomena crossing the boundary, and establishes clear interpretations for the ambiguous
+aspects of the problem statement.
+
+
+\end{document}
