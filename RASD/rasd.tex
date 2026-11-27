@@ -64,6 +64,8 @@
 \renewcommand{\headrulewidth}{0.4pt}
 \renewcommand{\headrule}{\hbox to\headwidth{\color{accent}\leaders\hrule height \headrulewidth\hfill}}
 
+\usepackage{placeins}
+\usepackage{float}
 \begin{document}
 
 % ---------------------------------------------------------------- Front page
@@ -140,6 +142,18 @@ world (the operational environment with which it interacts). This section deline
 formalizes the atomic phenomena crossing the boundary, and establishes clear interpretations for the ambiguous
 aspects of the problem statement.
 
+\textbf{Interpretation of the authentication.} The problem statement does not mention the authentication of
+consumers, but it speaks of consumers with different subscriptions, which the platform must be able to attribute to
+a specific consumer. We therefore assume that Consumers and Third-party systems are authenticated. Authentication is
+not a goal of any stakeholder: it is a supporting function of the goals that concern the delivery of data to the
+clients.
+
+\textbf{Interpretation of the slow consumers.} The problem statement prefers short delays to the loss of data, and
+requires that the failure of a consumer does not affect the others, but it does not say what to do with a consumer
+that remains slow. We interpret this as follows: \RP{} first delays the delivery to that consumer; the
+disconnection takes place only after the consumer has been notified and only when its delay can no longer be
+recovered without affecting the other consumers, so that no data is lost silently.
+
 \subsubsection{World phenomena}
 Table~\ref{tab:wp} lists the phenomena that take place in the world and are not observed or controlled by \RP{}.
  
@@ -190,6 +204,12 @@ SP16 & \RP{} delivers the tailored live data stream to the Consumer based on the
 SP17 & \RP{} delivers time-critical race-control alerts (e.g., red flags) to the subscribed Consumer. & \RP & Consumer\\
 SP18 & \RP{} delivers the requested historical data logs to the Consumer. & \RP & Consumer\\
 SP19 & \RP{} delivers the replay data stream, reproducing the race evolution exactly as it happened. & \RP & Consumer\\
+\midrule
+SP20 & OpenF1 informs \RP{} that a racing session has started or ended. & OpenF1 & \RP\\
+SP21 & \RP{} delivers to the Consumer or Third-party system the list of available racing sessions, both ongoing and concluded. & \RP & Consumer, Third-party system\\
+SP22 & \RP{} rejects a request of a Consumer or Third-party system that is not authenticated. & \RP & Consumer, Third-party system\\
+SP23 & \RP{} notifies a Consumer or Third-party system that it cannot keep up with its data stream. & \RP & Consumer, Third-party system\\
+SP24 & \RP{} closes the connection of a Consumer or Third-party system that cannot keep up with its data stream. & \RP & Consumer, Third-party system\\
 \end{longtable}
  
 \subsection{Definitions, Acronyms, Abbreviations}
@@ -273,40 +293,73 @@ This section presents the scenarios that illustrate how Consumers and Third-part
 in typical situations. Each scenario describes the behavior of the platform from the point of view of its users
 and of the external data provider.
 
-\textbf{S1 --- Following a race live.} On Sunday, Luca, a Consumer, logs into \RP{} through the GUI, opens the
-ongoing race session, and creates a subscription requesting lap and sector times, driver intervals, and car
-positions for all drivers, weather conditions and race-control events of the session, and car telemetry for two
-selected drivers. The GUI renders the timing tower, the live track map, and the race-control feed in near real
-time. Midway through the race, Luca updates his subscription to monitor the telemetry of a different driver;
-from that moment on, \RP{} applies the updated selection without dropping or re-establishing his active
-connection.
+\textbf{S1 --- Following a race live.} Luca, a Consumer, opens the \RP{} GUI and logs in. From the list of
+available sessions he selects the Sunday race, which is in progress. He subscribes to timing, location,
+race-control and weather data for all drivers, and to the telemetry of two specific cars. The GUI shows the
+requested data as the race unfolds. Midway through the race he replaces one of the two cars in his telemetry
+selection. From that moment he receives the telemetry of the new car and no longer that of the replaced one,
+without reconnecting.
 
-\textbf{S2 --- Third-party telemetry application.} Anna, a third-party developer, generates an API key and uses
-it to connect her dashboard application, a Third-party system, to the \RP{} API through a streaming connection.
-The application subscribes exclusively to car telemetry and pit-stop information for three specific drivers of
-the ongoing racing session, and the platform streams only the requested data. When Anna's network experiences an
-interruption of a few seconds, her application resumes the stream upon reconnection and recovers the data missed
-during the outage.
+\textbf{S2 --- Unauthenticated access attempt.} A visitor opens the \RP{} GUI and tries to open an ongoing race
+session without logging in. \RP{} shows no data and asks the visitor to log in. Separately, a software system
+requests the live telemetry of an ongoing race through the API without valid credentials. \RP{} rejects the
+request and delivers no data.
 
-\textbf{S3 --- Safety car.} During an active racing session, race direction deploys the safety car, and OpenF1
-transmits the corresponding event to \RP{}. Because safety-car announcements are classified as critical
-race-control events, \RP{} prioritizes this event over ordinary data pending at the same instant and, under
-normal operating conditions, delivers it within one second of its reception to every Consumer and Third-party
-system subscribed to race-control events.
+\textbf{S3 --- Third-party telemetry application.} Anna, a third-party developer, develops a dashboard
+application, a Third-party system. The application authenticates through the API, selects the ongoing session and
+subscribes only to the telemetry and pit-stop data of three specific drivers. \RP{} delivers to the application
+only the data that matches this subscription.
 
-\textbf{S4 --- Historical analysis.} Marco develops a third-party analytical tool that compares the lap times of
-two drivers across all races of the 2024 season and shows the lap-by-lap position evolution of one driver in
-each race. The tool queries the \RP{} API for lap and timing data of several concluded sessions and, under
-normal operating conditions, receives the first results within three seconds. When it also extracts large
-volumes of detailed car telemetry, the results are returned page by page.
+\textbf{S4 --- Critical race-control event.} During the race, OpenF1 sends a safety-car deployment event. \RP{}
+delivers it to Luca, who is subscribed to race-control data, within one second of its reception. Anna's
+application is not subscribed to race-control data and does not receive it.
 
-% TODO (compagno): scenari S5--S9 (Replay; Surge and failure; System limits and automated consolidation;
-% Long-term data retention; Live to historical transition), nello stesso formato:
-% \textbf{S5 --- Replay.} testo...
+\textbf{S5 --- Peak load and slow consumer.} At the start of the race, the rate of data received from OpenF1
+triples for a few seconds. \RP{} delays the delivery of part of the data by a few seconds, but does not lose any of
+it. During the same race, a mobile client on a very slow connection cannot keep up with the data it has subscribed
+to. \RP{} notifies that client and disconnects it, while all the other connected consumers keep receiving their
+data without interruption.
+
+\textbf{S6 --- Interruption of the data source.} In the middle of a session, the connection between \RP{} and
+OpenF1 is lost for 20 seconds. When the connection is available again, \RP{} requests the missing data from the
+historical interface of OpenF1, so that the data of those 20 seconds is also part of its stored data.
+
+\textbf{S7 --- Historical analysis and comparison.} Marco, a sports journalist and a Consumer, logs in to the GUI.
+He requests the telemetry and lap times of one driver in a race that \RP{} stored 4 years and 11 months earlier.
+The first results arrive within three seconds. He then requests the comparison of the lap times and of the
+lap-by-lap position evolution of two drivers across all the races of the last season, and the weather conditions at
+a specific lap of one of those races. The result of the comparison is large and is returned page by page.
+
+\textbf{S8 --- Replay of a recently ended race.} The Monza race ends and OpenF1 stops sending live data. Ten
+minutes later, Elena, a Consumer, logs in, selects the race from the list of available sessions and requests its
+replay. \RP{} delivers the data of the race reproducing its evolution as it happened, with the same order and the
+same relative timing.
 
 \subsubsection{Shared phenomena}
-% TODO (compagno): dettagli ulteriori sugli shared phenomena della Sezione 1.2.2, se ritenuti utili.
-% Se la sezione viene eliminata, aggiornare di conseguenza la descrizione del Capitolo 2 in 1.6.
+The shared phenomena of Section~1.2.2 are the only points at which the world and \RP{} interact, and every
+scenario is expressed through them. In each phenomenon the controller is the entity that causes it and the
+observer is the entity that perceives it. Three groups can be distinguished: the phenomena exchanged with the
+external data provider (SP1--SP8 and SP20), which concern the acquisition of the racing data; the phenomena
+controlled by the clients (SP9--SP15), through which Consumers and Third-party systems authenticate, subscribe
+to live data, query historical data and request a replay; and the phenomena controlled by \RP{} towards the
+clients (SP16--SP19 and SP21--SP24), which are the deliveries of data and the responses to the requests, including
+the rejection of unauthenticated requests and the notification and disconnection of a client that cannot keep up.
+Table~\ref{tab:sc-sp} indicates which shared phenomena take place in each scenario.
+
+\begin{longtable}{@{}L{1.4cm} L{5.2cm} L{7.5cm}@{}}
+\caption{Shared phenomena involved in each scenario.}\label{tab:sc-sp}\\
+\toprule \textbf{Scenario} & \textbf{Title} & \textbf{Shared phenomena}\\ \midrule \endfirsthead
+\toprule \textbf{Scenario} & \textbf{Title} & \textbf{Shared phenomena}\\ \midrule \endhead
+\bottomrule \endfoot
+S1 & Following a race live & SP9, SP21, SP10, SP11, SP12, SP13, SP16\\
+S2 & Unauthenticated access attempt & SP9, SP22\\
+S3 & Third-party telemetry application & SP9, SP10, SP11, SP12, SP16\\
+S4 & Critical race-control event & SP8, SP17\\
+S5 & Peak load and slow consumer & SP1, SP3--SP8, SP16, SP23, SP24\\
+S6 & Interruption of the data source & SP1, SP2, SP3--SP8\\
+S7 & Historical analysis and comparison & SP9, SP14, SP18\\
+S8 & Replay of a recently ended race & SP20, SP9, SP21, SP15, SP19\\
+\end{longtable}
 
 \subsubsection{Class diagram}
 This section presents the domain model of \RP{} as a high-level class diagram (Figure~\ref{fig:class}). The
@@ -389,6 +442,12 @@ states described in Section~2.1.4. The same concepts are formalized in the Alloy
       node[pos=0.1, mult, right] {1} node[pos=0.9, mult, right] {0..*} node[midway, alab, right=2pt] {contains};
 \draw[assoc] ([xshift=-0.8cm]drv.south) -- ([xshift=0.4cm]drec.north)
       node[pos=0.04, mult, right] {1} node[pos=0.96, mult, right] {0..*} node[midway, alab, right=2pt] {refers to};
+\node[cls] (rep) at (-1.6,-6.8) {\cn{Replay} \nodepart{two} status};
+\draw[assoc] (client.west) -| (rep.north)
+      node[pos=0.04, mult, above] {1} node[pos=0.97, mult, left] {0..*} node[pos=0.6, alab, left=2pt] {requests};
+\draw[assoc] (rep.east) -| (4.9,-3.4) -- (rs.west)
+      node[pos=0.04, mult, above] {*} node[pos=0.985, mult, above] {1};
+\node[alab, below right=1pt and 2pt] at (rep.east) {\{session is concluded\}};
 \end{tikzpicture}}
 \caption{High-level class diagram of \RP.}\label{fig:class}
 \end{figure}
@@ -406,7 +465,7 @@ timestamp and belongs to exactly one racing session. Each data category is a spe
 samples, car positions, lap and sector times, driver intervals and pit stops refer to a specific driver and
 therefore specialize the abstract class \emph{DriverRecord}, while weather updates and race-control events
 describe the session as a whole. The \emph{critical} attribute of a race-control event marks the events that must
-be delivered with priority, such as red flags and safety-car announcements (scenario S3). The content of each
+be delivered with priority, such as red flags and safety-car announcements (scenario S4). The content of each
 record (for example, speed, throttle and gear for telemetry) is omitted for readability.
 
 \textbf{Subscriptions.} A \emph{Subscription} is held by one client and refers to one racing session, which must be
@@ -415,11 +474,13 @@ empty set of drivers stands for all the drivers of the session. Since each selec
 client can request different drivers for different categories, as in scenario S1, where telemetry is requested
 for two drivers and the other categories for all drivers.
 
-% TODO (compagno): aggiungere al class diagram Replay (S5) e, se necessario per S7, ApiKey, una volta concordati.
+\textbf{Replays.} A \emph{Replay} is requested by one client for one racing session, which must be concluded, and
+has a status (playing or ended) corresponding to the states described in Section~2.1.4. A client can request any
+number of replays, and each replay is independent of the others and of the live subscriptions.
 
 \subsubsection{State diagrams}
 This section describes, through UML state diagrams, the life cycle of the domain entities that govern the access
-to \RP{} and the delivery of live data. Transitions are labeled as \emph{event [guard] / action}; the filled circle
+to \RP{}, the acquisition of data from OpenF1, and the delivery of live, replayed and historical data. Transitions are labeled as \emph{event [guard] / action}; the filled circle
 marks the initial state and the circle with an inner dot marks the final state.
 
 \textbf{Client connection.} Figure~\ref{fig:sd-conn} describes the connection of a Consumer or a Third-party system
@@ -428,7 +489,7 @@ moves to \emph{Authenticated} only when valid credentials (through the GUI) or a
 are presented. Once authenticated, the client can use the services of the platform until it logs out or
 disconnects, which closes the connection.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering
 \begin{tikzpicture}
 \node[ini] (i) {};
@@ -438,7 +499,7 @@ disconnects, which closes the connection.
 \draw[tr] (i) -- (u);
 \draw[tr] (u) -- node[lbl, above, text width=3.4cm] {[valid credentials or API key]\\ / grant access} (a);
 \draw[tr] (a) -- node[lbl, above, text width=2.6cm] {logout or\\ disconnection} (f);
-\draw[tr] (u.north west) to[out=120, in=60, looseness=7]
+\draw[tr] (u.north west) to[out=120, in=60, looseness=2.6]
       node[lbl, above, text width=4cm] {request without valid credentials\\ / reject request} (u.north east);
 \end{tikzpicture}
 \caption{State diagram of a client connection.}\label{fig:sd-conn}
@@ -449,7 +510,7 @@ distinction exposed by the \emph{Browse sessions} function. A session is \emph{O
 ends: in this state \RP{} acquires its live data from OpenF1 and clients can subscribe to it. Once the session
 has ended it is \emph{Concluded}: its data is kept as historical data and can be queried and replayed.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering
 \begin{tikzpicture}
 \node[ini] (i) {};
@@ -470,7 +531,7 @@ applies to the data delivered from that moment on and does not affect the connec
 change of state. The subscription is closed when the client unsubscribes or disconnects, or when the session
 concludes.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering
 \begin{tikzpicture}
 \node[ini] (i) {};
@@ -479,7 +540,7 @@ concludes.
 \node[fin, right=4.2cm of a] (f) {};
 \draw[tr] (i) -- node[lbl, below, text width=3.2cm] {subscribe(session, selections)\\
       \relax[client authenticated, session ongoing, selections valid]} (a);
-\draw[tr] (a.north west) to[out=120, in=60, looseness=7]
+\draw[tr] (a.north west) to[out=120, in=60, looseness=2.6]
       node[lbl, above, text width=5.4cm] {modify(categories and/or drivers)\\
       / apply the new selection to the data delivered from now on} (a.north east);
 \draw[tr] (a) -- node[lbl, above, text width=3.2cm] {unsubscribe or disconnection,\\ or session concludes} (f);
@@ -487,47 +548,208 @@ concludes.
 \caption{State diagram of a subscription.}\label{fig:sd-sub}
 \end{figure}
 
-% TODO (compagno): ulteriori state diagram per le sue parti, ad esempio replay (S5), API key sospesa (S7),
-% slow consumer disconnesso (S6) o ripresa della connessione (S2), da concordare con la mia parte.
+\textbf{Delivery of live data.} Figure~\ref{fig:sd-delivery} describes the delivery of live data to a client that
+holds an active subscription, which is the situation of the \emph{Follow a live session} function. Delivery
+starts in the \emph{Up to date} state, in which the data matching the subscription is delivered as soon as it is
+available. If the delivery cannot keep the pace of the data production, for instance because of a peak in the
+incoming data or of a slow client, the delivery moves to \emph{Delayed}: the data is buffered and delivered later
+rather than lost, and it returns to \emph{Up to date} as soon as it has caught up. Disconnection is a last resort: the
+data that can be buffered for a single client is limited, because an unbounded buffer would eventually degrade the
+service of the other clients. Only when the delay of a client exceeds the tolerated limit, which is the maximum
+amount of data that can be kept for it without affecting the others, is the client notified and disconnected.
 
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\node[ini] (i) {};
+\node[stt, right=2.6cm of i, minimum width=3.4cm] (u)
+     {\textbf{Up to date}\\[2pt]\scriptsize data delivered as soon\\ as it is available};
+\node[stt, right=4.4cm of u, minimum width=3.4cm] (d)
+     {\textbf{Delayed}\\[2pt]\scriptsize data buffered and\\ delivered later};
+\node[fin, below=2.6cm of d] (f) {};
+\draw[tr] (i) -- node[lbl, above, text width=2.2cm] {subscription active} (u);
+\draw[tr] (u) to[bend left=25] node[lbl, above, text width=3.8cm]
+      {\relax[delivery cannot keep the pace of production]\\ / buffer the data} (d);
+\draw[tr] (d) to[bend left=25] node[lbl, below, text width=3.8cm]
+      {\relax[delivery has caught up]\\ / deliver the buffered data} (u);
+\draw[tr] (d) -- node[lbl, right, text width=3.2cm]
+      {\relax[delay exceeds the tolerated limit]\\ / notify the client and close its connection} (f);
+\end{tikzpicture}
+\caption{State diagram of the delivery of live data to a client.}\label{fig:sd-delivery}
+\end{figure}
+
+\textbf{Replay.} Figure~\ref{fig:sd-replay} describes a replay, which is created when an authenticated client
+requests the replay of a concluded session. While the replay is \emph{Playing}, \RP{} delivers the stored data in
+its original order and with its original relative timing. The replay ends when the last datum has been delivered
+or when the client stops it, and it does not affect any other replay, subscription or client.
+% Optional: pause and resume (replay controls), shown dashed in the figure.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\node[ini] (i) {};
+\node[stt, right=3.2cm of i, minimum width=3.8cm] (p)
+     {\textbf{Playing}\\[2pt]\scriptsize data delivered in the original\\ order and relative timing};
+\node[stt, dashed, right=3.8cm of p, minimum width=3cm] (a)
+     {\textbf{Paused}\\[2pt]\scriptsize delivery suspended};
+\node[fin, below=2.6cm of p] (f) {};
+\draw[tr] (i) -- node[lbl, above, text width=2.9cm]
+      {\relax[client authenticated, session concluded]\\ / start the replay} (p);
+\draw[tr, dashed] (p) to[bend left=25] node[lbl, above=3pt] {pause} (a);
+\draw[tr, dashed] (a) to[bend left=25] node[lbl, below=3pt] {resume} (p);
+\draw[tr] (p) -- node[lbl, right, text width=3.4cm]
+      {last datum delivered or stop\\ / close the replay} (f);
+\draw[tr, dashed] (a.south) |- node[lbl, pos=0.75, above] {stop} (f.east);
+\end{tikzpicture}
+\caption{State diagram of a replay.}\label{fig:sd-replay}
+\end{figure}
+
+\textbf{Connection with the data provider.} Figure~\ref{fig:sd-source} describes the connection between \RP{} and
+OpenF1, which is the situation of the functions \emph{Acquire and store race data} and \emph{Recover missing data}.
+The connection is \emph{Idle} while no live session is in progress. When a session starts, \RP{} requests its live
+data and the connection becomes \emph{Receiving}: every datum received is stored. If the connection is lost, it
+becomes \emph{Interrupted}. When it is re-established, the live stream is resumed and \RP{} requests the missing
+data from the historical interface of OpenF1 (\emph{Recovering}); once this data has been stored, the connection
+goes back to \emph{Receiving}.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\node[ini] (i) {};
+\node[stt, right=1cm of i, minimum width=2.7cm] (id)
+     {\textbf{Idle}\\[2pt]\scriptsize no live session\\ in progress};
+\node[stt, right=3cm of id, minimum width=2.7cm] (r)
+     {\textbf{Receiving}\\[2pt]\scriptsize live data received\\ and stored};
+\node[stt, right=3cm of r, minimum width=2.7cm] (x)
+     {\textbf{Interrupted}\\[2pt]\scriptsize connection with\\ OpenF1 lost};
+\node[stt, below=2.8cm of r, minimum width=2.7cm] (c)
+     {\textbf{Recovering}\\[2pt]\scriptsize missing data requested\\ from OpenF1};
+\draw[tr] (i) -- (id);
+\draw[tr] (id) to[bend left=25] node[lbl, above, text width=3.4cm]
+      {\relax[session starts]\\ / request the live data} (r);
+\draw[tr] (r) to[bend left=25] node[lbl, below, text width=2.4cm] {\relax[session ends]} (id);
+\draw[tr] (r) -- node[lbl, above, text width=3.2cm] {\relax[connection lost]} (x);
+\draw[tr] (x.south) |- node[lbl, pos=0.78, above, text width=3.4cm]
+      {\relax[connection re-established]\\ / resume the live data, request the missing data} (c.east);
+\draw[tr] (c) -- node[lbl, left, text width=2.6cm] {\relax[missing data stored]} (r);
+\end{tikzpicture}
+\caption{State diagram of the connection between \RP{} and OpenF1.}\label{fig:sd-source}
+\end{figure}
+
+\textbf{Historical query.} Figure~\ref{fig:sd-query} describes a query on historical data, including the comparison
+of data across several races. A query is accepted only if the client is authenticated and the query is valid.
+While it is \emph{Processing}, \RP{} retrieves the requested data; as soon as the first results are available the
+query moves to \emph{Returning results}, where the results are delivered page by page if they are large. The query
+terminates when all the results have been delivered.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\node[ini] (i) {};
+\node[stt, right=3cm of i, minimum width=3cm] (p)
+     {\textbf{Processing}\\[2pt]\scriptsize requested data being\\ retrieved};
+\node[stt, right=3.1cm of p, minimum width=3cm] (r)
+     {\textbf{Returning results}\\[2pt]\scriptsize results delivered\\ page by page};
+\node[fin, right=2.4cm of r] (f) {};
+\draw[tr] (i) -- node[lbl, above, text width=2.9cm]
+      {\relax[client authenticated, query valid]\\ / retrieve the data} (p);
+\draw[tr] (p) -- node[lbl, above, text width=3cm] {\relax[first results available]} (r);
+\draw[tr] (r.north west) to[out=120, in=60, looseness=2.6]
+      node[lbl, above, text width=3.2cm] {\relax[next page requested]\\ / deliver the next page} (r.north east);
+\draw[tr] (r) -- node[lbl, above, text width=2.4cm] {\relax[all results delivered]} (f);
+\end{tikzpicture}
+\caption{State diagram of a query on historical data.}\label{fig:sd-query}
+\end{figure}
+
+\FloatBarrier
 \subsection{Product functions}
 This section summarizes the main functions offered by \RP{}. The goals each function contributes to are
 indicated in brackets; the corresponding requirements are detailed in Chapter~3.
 
-\textbf{Authenticate:} Consumers (through the GUI, by logging in) and Third-party systems (through the API,
-using an API key) must authenticate before accessing \RP{} services; any request that is not authenticated is
-rejected by the platform.
+\textbf{Authenticate (supports G2, G3, G4, G5):} The Consumer or Third-party system authenticates to access \RP{};
+requests that are not authenticated are rejected. This is a supporting function: no goal requires it directly, but
+all the functions that serve G2, G3, G4 and G5 presuppose a client recognized by the platform.
 
-\textbf{Browse sessions (G2, G4):} Consumers and Third-party systems can retrieve and inspect the catalog of
-available Formula~1 racing sessions, with ongoing live sessions clearly distinguished from concluded historical
-sessions.
+\textbf{Browse sessions (G2, G4):} The Consumer or Third-party system views the list of available sessions, both
+ongoing and concluded.
 
-\textbf{Subscribe to live data (G3):} During an ongoing racing session, a Consumer or Third-party system can
-create a subscription by selecting the session and specifying the data categories it wishes to receive and the
-drivers of interest, which can differ from one category to another.
+\textbf{Subscribe to live data (G3):} The Consumer or Third-party system selects an ongoing session and specifies
+the data categories and the drivers it wants to receive.
 
-\textbf{Modify a subscription (G3):} A Consumer or Third-party system can update the subscribed data categories
-and/or the monitored drivers at any point during an ongoing session; the new selection applies to the data
-delivered from that moment on, without terminating or re-establishing the connection.
+\textbf{Modify a subscription (G3):} The Consumer or Third-party system changes the categories or the drivers
+during the session, without reconnecting.
 
-% TODO (compagno): funzioni Follow a live session (G2, G5), Query historical data (G4),
-% Compare data across races (G4), Replay a past session (G4), Acquire and store race data (G1, G6),
-% Recover missing data (G1, G6), Handle workload peaks and slow consumers (G7), nello stesso formato:
-% \textbf{Nome funzione (Gx):} testo...
+\textbf{Follow a live session (G2, G5):} \RP{} delivers the subscribed data in near real time; critical
+race-control events, such as red flags or safety-car announcements, are delivered with priority.
+
+\textbf{Query historical data (G4):} The Consumer or Third-party system queries past sessions by session, driver,
+lap, weather and telemetry; large results are returned page by page.
+
+\textbf{Compare data across races (G4):} The Consumer or Third-party system compares lap times and position
+evolution of drivers across several races.
+
+\textbf{Replay a past session (G4):} The Consumer selects a concluded session and \RP{} delivers its data as it
+happened, with the same order and relative timing.
+
+\textbf{Acquire and store race data (G1, G6):} \RP{} receives the data from OpenF1 during a session and stores all
+of it persistently.
+
+\textbf{Recover missing data (G1, G6):} After an interruption of the connection with OpenF1, \RP{} retrieves the
+missing data from the historical interface of OpenF1.
+
+\textbf{Handle workload peaks and slow consumers (G7):} During workload peaks \RP{} delays the delivery rather
+than losing data. If a consumer cannot keep up, \RP{} notifies it and disconnects it, without affecting the others.
 
 \subsection{User characteristics}
-% TODO (compagno): caratteristiche di Consumer e Third-party system.
+\RP{} is used by two distinct categories of users, whose needs differ.
+
+\textbf{Consumers.} Consumers are human users, typically racing enthusiasts, who access \RP{} through the GUI. They
+do not need any technical knowledge: they want to follow a race as it happens, look at past races or replay them,
+and they are usually interested in a subset of the available information, such as the positions of the drivers,
+the lap times, the race-control events or the telemetry of a few cars. They may use the platform from devices and
+network connections of very different quality, so some of them may not be able to keep up with the data stream they
+have requested. The platform is expected to support at least 10{,}000 Consumers connected at the same time in the
+initial deployment.
+
+\textbf{Third-party systems.} Third-party systems are external software systems, developed by third-party
+developers, that access \RP{} programmatically through the API. They are used by developers who have the technical
+skills needed to integrate the API. Their needs range from receiving only occasional race events to consuming
+telemetry continuously for several cars, and they may analyze data across many races, compare lap times, retrieve
+the weather at a given point of a race or analyze the telemetry of selected laps. Up to 100 of them are expected to
+use the platform at the same time in the initial deployment.
 
 \subsection{Assumptions, dependencies and constraints}
 
 \subsubsection{Domain assumptions}
-% TODO (compagno): domain assumptions, da aggiungere come righe della tabella (DA1, DA2, ...).
+The domain assumptions are the properties of the world that are not under the control of \RP{} and that are
+assumed to hold; the requirements of Chapter~3 rely on them.
 \begin{longtable}{@{}L{1.4cm} L{13.3cm}@{}}
 \caption{Domain assumptions.}\label{tab:da}\\
 \toprule \textbf{ID} & \textbf{Description}\\ \midrule \endfirsthead
 \toprule \textbf{ID} & \textbf{Description}\\ \midrule \endhead
 \bottomrule \endfoot
-% DA1 & Description.\\
+DA1 & OpenF1 provides correct and complete data about what happens during a racing session.\\
+DA2 & Every datum sent by OpenF1 carries the time assigned by the provider and is identified by its racing session, driver and data category.\\
+DA3 & \RP{} has access to the live data of OpenF1, which requires the payment of a fee, during every racing session.\\
+DA4 & OpenF1 informs \RP{} of the start and of the end of each racing session.\\
+DA5 & The race-control messages of OpenF1 contain enough information to recognize red flags, safety-car deployments and the other critical events.\\
+DA6 & The historical interface of OpenF1 contains the complete data of a racing session, including the data that \RP{} did not receive during an interruption of the live connection.\\
+DA7 & The data of a concluded racing session is not modified by OpenF1 afterwards.\\
+DA8 & Every legitimate Consumer and Third-party system owns valid credentials and keeps them secret.\\
+DA9 & The network and the device of a client may be too slow to receive its subscribed data at the rate at which it is produced.\\
+DA10 & Under normal conditions the number of connected clients stays within the figures of the initial deployment (10{,}000 Consumers and 100 Third-party systems), and the peaks in the workload are temporary.\\
 \end{longtable}
+
+
+\subsubsection{Dependencies}
+\RP{} depends on OpenF1 as its only source of racing information. The live data of OpenF1 can be accessed only
+under payment of a fee, whereas its historical data is available for free. For the purposes of this project,
+OpenF1 is considered an external data provider representing the cars, the sensors installed around the circuit, the
+weather stations, the timing systems and the race-control systems.
+
+\subsubsection{Constraints}
+Both the GUI and the API are part of \RP{}; not all the data is required to be offered through both. The scope of
+this document covers the live and historical data, their timeliness, availability and capacity objectives; the
+evolution requirements of Section~6.4 of the assignment are out of scope.
 
 \end{document}
