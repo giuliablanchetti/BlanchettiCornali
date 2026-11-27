@@ -13,9 +13,33 @@
 \usepackage{xcolor}
 \usepackage{needspace}
 \usepackage[hidelinks]{hyperref}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,calc,positioning,shapes.multipart}
 
 \definecolor{accent}{HTML}{1F3A5F}
 \definecolor{rowgray}{HTML}{F2F4F7}
+
+% ---- TikZ styles for the UML diagrams of Chapter 2
+\tikzset{
+  % state diagrams
+  stt/.style={draw=accent, rounded corners=7pt, fill=rowgray, minimum height=1.1cm, minimum width=2.8cm,
+              align=center, font=\small, inner sep=4pt},
+  ini/.style={circle, fill=black, minimum size=7pt, inner sep=0pt},
+  fin/.style={circle, draw=black, minimum size=12pt, inner sep=0pt,
+              path picture={\fill (path picture bounding box.center) circle (3.6pt);}},
+  tr/.style={-{Stealth[length=2.4mm]}},
+  lbl/.style={font=\scriptsize, align=center, inner sep=2pt},
+  % class diagram
+  cls/.style={rectangle split, rectangle split parts=2, draw=accent, rectangle split part fill={rowgray,white},
+              font=\scriptsize, text width=2.6cm, align=left, inner sep=3pt},
+  cls0/.style={draw=accent, fill=rowgray, font=\scriptsize\bfseries, minimum width=2.3cm, minimum height=0.6cm,
+               align=center, inner sep=3pt},
+  assoc/.style={draw=black!75},
+  gen/.style={-{Triangle[open,length=4mm,width=3.6mm]}, draw=black!75},
+  mult/.style={font=\tiny, inner sep=1.5pt},
+  alab/.style={font=\tiny\itshape, inner sep=1.5pt},
+}
+\newcommand{\cn}[1]{{\centering\textbf{#1}\par}}
 
 \newcommand{\RP}{RacePulse}
 \newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
@@ -237,4 +261,273 @@ This document follows the structure suggested by the course, derived from the IE
 \item[Chapter 5: Effort spent] reports the hours worked by each group member on this document.
 \item[Chapter 6: References] lists the sources used in this document.
 \end{description}
+
+% ---------------------------------------------------------------- Chapter 2
+\clearpage
+\section{Overall description}
+
+\subsection{Product perspective}
+
+\subsubsection{Scenarios}
+This section presents the scenarios that illustrate how Consumers and Third-party systems interact with \RP{}
+in typical situations. Each scenario describes the behavior of the platform from the point of view of its users
+and of the external data provider.
+
+\textbf{S1 --- Following a race live.} On Sunday, Luca, a Consumer, logs into \RP{} through the GUI, opens the
+ongoing race session, and creates a subscription requesting lap and sector times, driver intervals, and car
+positions for all drivers, weather conditions and race-control events of the session, and car telemetry for two
+selected drivers. The GUI renders the timing tower, the live track map, and the race-control feed in near real
+time. Midway through the race, Luca updates his subscription to monitor the telemetry of a different driver;
+from that moment on, \RP{} applies the updated selection without dropping or re-establishing his active
+connection.
+
+\textbf{S2 --- Third-party telemetry application.} Anna, a third-party developer, generates an API key and uses
+it to connect her dashboard application, a Third-party system, to the \RP{} API through a streaming connection.
+The application subscribes exclusively to car telemetry and pit-stop information for three specific drivers of
+the ongoing racing session, and the platform streams only the requested data. When Anna's network experiences an
+interruption of a few seconds, her application resumes the stream upon reconnection and recovers the data missed
+during the outage.
+
+\textbf{S3 --- Safety car.} During an active racing session, race direction deploys the safety car, and OpenF1
+transmits the corresponding event to \RP{}. Because safety-car announcements are classified as critical
+race-control events, \RP{} prioritizes this event over ordinary data pending at the same instant and, under
+normal operating conditions, delivers it within one second of its reception to every Consumer and Third-party
+system subscribed to race-control events.
+
+\textbf{S4 --- Historical analysis.} Marco develops a third-party analytical tool that compares the lap times of
+two drivers across all races of the 2024 season and shows the lap-by-lap position evolution of one driver in
+each race. The tool queries the \RP{} API for lap and timing data of several concluded sessions and, under
+normal operating conditions, receives the first results within three seconds. When it also extracts large
+volumes of detailed car telemetry, the results are returned page by page.
+
+% TODO (compagno): scenari S5--S9 (Replay; Surge and failure; System limits and automated consolidation;
+% Long-term data retention; Live to historical transition), nello stesso formato:
+% \textbf{S5 --- Replay.} testo...
+
+\subsubsection{Shared phenomena}
+% TODO (compagno): dettagli ulteriori sugli shared phenomena della Sezione 1.2.2, se ritenuti utili.
+% Se la sezione viene eliminata, aggiornare di conseguenza la descrizione del Capitolo 2 in 1.6.
+
+\subsubsection{Class diagram}
+This section presents the domain model of \RP{} as a high-level class diagram (Figure~\ref{fig:class}). The
+diagram is a conceptual model of the problem domain: it captures the main entities involved in the scenarios of
+Section~2.1.1 and in the product functions of Section~2.2, their essential attributes, and the relationships
+among them. It is not a design model: operations and elements that belong to the architecture of the system,
+such as components, communication protocols, buffering mechanisms and storage, are deliberately left to the
+Design Document.
+
+The model is organized around four groups of concepts: the clients that access the platform (Consumers and
+Third-party systems), the racing sessions and the drivers that take part in them, the racing data produced
+during a session, and the subscriptions through which clients select the data they want to receive.
+Generalizations are used where concepts share structure, in particular for the different data categories, which
+makes it possible to introduce new categories without altering the rest of the model. Enumerations represent the
+data categories and the status of racing sessions and subscriptions; the values of the latter correspond to the
+states described in Section~2.1.4. The same concepts are formalized in the Alloy model of Chapter~4.
+
+\begin{figure}[htbp]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}
+% ---------- clients
+\node[cls0] (client) at (1.45,0) {\textit{Client}};
+\node[cls0] (consumer) at (0,-3.2) {Consumer};
+\node[cls0] (tps) at (2.9,-3.2) {ThirdPartySystem};
+% ---------- subscriptions
+\node[cls] (subs) at (7,0) {\cn{Subscription} \nodepart{two} status};
+\node[cls] (sel) at (12.4,0) {\cn{Selection} \nodepart{two} category};
+\node[cls] (dc) at (12.4,3.8) {{\centering\scriptsize\guillemotleft enumeration\guillemotright\par\textbf{DataCategory}\par}
+      \nodepart{two} carTelemetry\\ carPositions\\ lapAndSectorTimes\\ driverIntervals\\ pitStops\\ weather\\ raceControl};
+% ---------- sessions and drivers
+\node[cls] (rs) at (7,-3.4) {\cn{RacingSession} \nodepart{two} sessionType\\ year\\ status};
+\node[cls] (drv) at (12.4,-3.4) {\cn{Driver} \nodepart{two} number\\ name\\ team};
+% ---------- racing data
+\node[cls] (dr0) at (7,-6.8) {\cn{\textit{DataRecord}} \nodepart{two} timestamp};
+\node[cls0, anchor=north] (wu) at (4.0,-8.9) {WeatherUpdate};
+\node[cls, anchor=north] (rce) at (7.0,-8.9) {\cn{RaceControlEvent} \nodepart{two} critical: Boolean};
+\node[cls0, anchor=north] (drec) at (11.2,-8.9) {\textit{DriverRecord}};
+\node[cls0, anchor=north] (tel) at (4.4,-11.3) {TelemetrySample};
+\node[cls0, anchor=north] (pos) at (6.75,-11.3) {PositionSample};
+\node[cls0, anchor=north] (lap) at (9.1,-11.3) {LapRecord};
+\node[cls0, anchor=north] (itv) at (11.45,-11.3) {IntervalRecord};
+\node[cls0, anchor=north] (pit) at (13.8,-11.3) {PitStop};
+
+% ---------- generalizations
+\coordinate (bus0) at (0,-1.55);
+\draw[assoc] (consumer.north |- bus0) -- (tps.north |- bus0);
+\draw[assoc] (consumer.north |- bus0) -- (consumer.north);
+\draw[assoc] (tps.north |- bus0) -- (tps.north);
+\draw[gen] (client.south |- bus0) -- (client.south);
+
+\coordinate (bus1) at (0,-8.3);
+\coordinate (drecg) at ($(drec.north)+(-0.8,0)$);
+\draw[assoc] (wu.north |- bus1) -- (drecg |- bus1);
+\draw[assoc] (wu.north |- bus1) -- (wu.north);
+\draw[assoc] (rce.north |- bus1) -- (rce.north);
+\draw[assoc] (drecg |- bus1) -- (drecg);
+\draw[gen] (dr0.south |- bus1) -- (dr0.south);
+
+\coordinate (bus2) at (0,-10.6);
+\draw[assoc] (tel.north |- bus2) -- (pit.north |- bus2);
+\foreach \c in {tel,pos,lap,itv,pit}{\draw[assoc] (\c.north |- bus2) -- (\c.north);}
+\draw[gen] (drec.south |- bus2) -- (drec.south);
+
+% ---------- associations
+\draw[assoc] (client.east) -- (subs.west)
+      node[pos=0.1, mult, above] {1} node[pos=0.9, mult, above] {0..*} node[midway, alab, above] {holds};
+\draw[assoc] (subs.south) -- (rs.north)
+      node[pos=0.1, mult, right] {0..*} node[pos=0.9, mult, right] {1}
+      node[midway, alab, right=2pt] {on}
+      node[midway, alab, left=2pt] {\{session is ongoing\}};
+\draw[assoc, {Diamond[length=3.5mm,width=2.5mm]}-] (subs.east) -- (sel.west)
+      node[pos=0.9, mult, above] {1..*} node[midway, alab, above] {contains};
+\draw[assoc] (sel.south) -- (drv.north)
+      node[pos=0.1, mult, right] {*} node[pos=0.9, mult, right] {0..*} node[midway, alab, right=2pt] {drivers};
+\draw[dashed, -{Stealth[length=2mm]}] (sel.north) -- (dc.south) node[midway, alab, right=2pt] {category};
+\draw[assoc] (drv.west) -- (rs.east)
+      node[pos=0.1, mult, above] {*} node[pos=0.9, mult, above] {*} node[midway, alab, above] {takes part in};
+\draw[assoc] (rs.south) -- (dr0.north)
+      node[pos=0.1, mult, right] {1} node[pos=0.9, mult, right] {0..*} node[midway, alab, right=2pt] {contains};
+\draw[assoc] ([xshift=-0.8cm]drv.south) -- ([xshift=0.4cm]drec.north)
+      node[pos=0.04, mult, right] {1} node[pos=0.96, mult, right] {0..*} node[midway, alab, right=2pt] {refers to};
+\end{tikzpicture}}
+\caption{High-level class diagram of \RP.}\label{fig:class}
+\end{figure}
+
+\textbf{Clients.} \emph{Client} is an abstract class specialized into \emph{Consumer}, a human user of the GUI, and
+\emph{ThirdPartySystem}, an external software system using the API; both are authenticated before accessing the
+platform (Section~2.1.4) and a client can hold any number of subscriptions.
+
+\textbf{Racing sessions and drivers.} A \emph{RacingSession} has a type (practice, qualifying, sprint or race),
+the year in which it takes place and a status, which is either ongoing or concluded. Drivers take part in many
+sessions, and a session has many drivers.
+
+\textbf{Racing data.} Every piece of information received from OpenF1 is a \emph{DataRecord}, which has a
+timestamp and belongs to exactly one racing session. Each data category is a specialization of it. Telemetry
+samples, car positions, lap and sector times, driver intervals and pit stops refer to a specific driver and
+therefore specialize the abstract class \emph{DriverRecord}, while weather updates and race-control events
+describe the session as a whole. The \emph{critical} attribute of a race-control event marks the events that must
+be delivered with priority, such as red flags and safety-car announcements (scenario S3). The content of each
+record (for example, speed, throttle and gear for telemetry) is omitted for readability.
+
+\textbf{Subscriptions.} A \emph{Subscription} is held by one client and refers to one racing session, which must be
+ongoing. It is composed of one or more \emph{Selections}, each pairing a data category with a set of drivers; an
+empty set of drivers stands for all the drivers of the session. Since each selection has its own drivers, a
+client can request different drivers for different categories, as in scenario S1, where telemetry is requested
+for two drivers and the other categories for all drivers.
+
+% TODO (compagno): aggiungere al class diagram Replay (S5) e, se necessario per S7, ApiKey, una volta concordati.
+
+\subsubsection{State diagrams}
+This section describes, through UML state diagrams, the life cycle of the domain entities that govern the access
+to \RP{} and the delivery of live data. Transitions are labeled as \emph{event [guard] / action}; the filled circle
+marks the initial state and the circle with an inner dot marks the final state.
+
+\textbf{Client connection.} Figure~\ref{fig:sd-conn} describes the connection of a Consumer or a Third-party system
+with \RP{}. The connection starts in the \emph{Unauthenticated} state, in which every request is rejected, and
+moves to \emph{Authenticated} only when valid credentials (through the GUI) or a valid API key (through the API)
+are presented. Once authenticated, the client can use the services of the platform until it logs out or
+disconnects, which closes the connection.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\node[ini] (i) {};
+\node[stt, right=1cm of i] (u) {Unauthenticated};
+\node[stt, right=3.8cm of u] (a) {Authenticated};
+\node[fin, right=3cm of a] (f) {};
+\draw[tr] (i) -- (u);
+\draw[tr] (u) -- node[lbl, above, text width=3.4cm] {[valid credentials or API key]\\ / grant access} (a);
+\draw[tr] (a) -- node[lbl, above, text width=2.6cm] {logout or\\ disconnection} (f);
+\draw[tr] (u.north west) to[out=120, in=60, looseness=7]
+      node[lbl, above, text width=4cm] {request without valid credentials\\ / reject request} (u.north east);
+\end{tikzpicture}
+\caption{State diagram of a client connection.}\label{fig:sd-conn}
+\end{figure}
+
+\textbf{Racing session.} Figure~\ref{fig:sd-session} describes the status of a racing session, which is the
+distinction exposed by the \emph{Browse sessions} function. A session is \emph{Ongoing} from its start until it
+ends: in this state \RP{} acquires its live data from OpenF1 and clients can subscribe to it. Once the session
+has ended it is \emph{Concluded}: its data is kept as historical data and can be queried and replayed.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\node[ini] (i) {};
+\node[stt, right=2cm of i, minimum width=3.8cm] (o)
+     {\textbf{Ongoing}\\[2pt]\scriptsize live data acquired;\\ subscriptions allowed};
+\node[stt, right=3.2cm of o, minimum width=3.8cm] (c)
+     {\textbf{Concluded}\\[2pt]\scriptsize data kept as historical;\\ queries and replay allowed};
+\draw[tr] (i) -- node[lbl, above] {session starts} (o);
+\draw[tr] (o) -- node[lbl, above] {session ends} (c);
+\end{tikzpicture}
+\caption{State diagram of a racing session.}\label{fig:sd-session}
+\end{figure}
+
+\textbf{Subscription.} Figure~\ref{fig:sd-sub} describes a live subscription. A subscription is created in the
+\emph{Active} state when an authenticated client selects an ongoing session and a valid combination of data
+categories and drivers. While it is active, the client can modify the selection any number of times: the change
+applies to the data delivered from that moment on and does not affect the connection, so it does not cause any
+change of state. The subscription is closed when the client unsubscribes or disconnects, or when the session
+concludes.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\node[ini] (i) {};
+\node[stt, right=3.4cm of i, minimum width=3.4cm] (a)
+     {\textbf{Active}\\[2pt]\scriptsize data delivered according\\ to the current selections};
+\node[fin, right=4.2cm of a] (f) {};
+\draw[tr] (i) -- node[lbl, below, text width=3.2cm] {subscribe(session, selections)\\
+      \relax[client authenticated, session ongoing, selections valid]} (a);
+\draw[tr] (a.north west) to[out=120, in=60, looseness=7]
+      node[lbl, above, text width=5.4cm] {modify(categories and/or drivers)\\
+      / apply the new selection to the data delivered from now on} (a.north east);
+\draw[tr] (a) -- node[lbl, above, text width=3.2cm] {unsubscribe or disconnection,\\ or session concludes} (f);
+\end{tikzpicture}
+\caption{State diagram of a subscription.}\label{fig:sd-sub}
+\end{figure}
+
+% TODO (compagno): ulteriori state diagram per le sue parti, ad esempio replay (S5), API key sospesa (S7),
+% slow consumer disconnesso (S6) o ripresa della connessione (S2), da concordare con la mia parte.
+
+\subsection{Product functions}
+This section summarizes the main functions offered by \RP{}. The goals each function contributes to are
+indicated in brackets; the corresponding requirements are detailed in Chapter~3.
+
+\textbf{Authenticate:} Consumers (through the GUI, by logging in) and Third-party systems (through the API,
+using an API key) must authenticate before accessing \RP{} services; any request that is not authenticated is
+rejected by the platform.
+
+\textbf{Browse sessions (G2, G4):} Consumers and Third-party systems can retrieve and inspect the catalog of
+available Formula~1 racing sessions, with ongoing live sessions clearly distinguished from concluded historical
+sessions.
+
+\textbf{Subscribe to live data (G3):} During an ongoing racing session, a Consumer or Third-party system can
+create a subscription by selecting the session and specifying the data categories it wishes to receive and the
+drivers of interest, which can differ from one category to another.
+
+\textbf{Modify a subscription (G3):} A Consumer or Third-party system can update the subscribed data categories
+and/or the monitored drivers at any point during an ongoing session; the new selection applies to the data
+delivered from that moment on, without terminating or re-establishing the connection.
+
+% TODO (compagno): funzioni Follow a live session (G2, G5), Query historical data (G4),
+% Compare data across races (G4), Replay a past session (G4), Acquire and store race data (G1, G6),
+% Recover missing data (G1, G6), Handle workload peaks and slow consumers (G7), nello stesso formato:
+% \textbf{Nome funzione (Gx):} testo...
+
+\subsection{User characteristics}
+% TODO (compagno): caratteristiche di Consumer e Third-party system.
+
+\subsection{Assumptions, dependencies and constraints}
+
+\subsubsection{Domain assumptions}
+% TODO (compagno): domain assumptions, da aggiungere come righe della tabella (DA1, DA2, ...).
+\begin{longtable}{@{}L{1.4cm} L{13.3cm}@{}}
+\caption{Domain assumptions.}\label{tab:da}\\
+\toprule \textbf{ID} & \textbf{Description}\\ \midrule \endfirsthead
+\toprule \textbf{ID} & \textbf{Description}\\ \midrule \endhead
+\bottomrule \endfoot
+% DA1 & Description.\\
+\end{longtable}
+
 \end{document}
